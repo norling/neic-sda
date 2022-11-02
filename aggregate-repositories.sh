@@ -11,7 +11,7 @@ set -e
 
 echo "Aggregating files"
 
-for repo in $@
+for repo in "$@"
 do
     # clone repo into a temp dir
     tempdir="$(mktemp -d)"
@@ -19,21 +19,25 @@ do
 
     # get file mappings from mappings file
     repo_mappings=$(jq .["\"$repo\""] < aggregate-mappings.json)
-    for key in $(jq -r 'keys[]' <<< $repo_mappings)
+    for key in $(jq -r 'keys[]' <<< "$repo_mappings")
     do
         target=$(jq -r .["\"$key\""] <<< "$repo_mappings")
-        cp $tempdir/${repo#*/}/$key $target
+        if [ -f "$tempdir/${repo#*/}/$key" ]
+        then
+            cp "$tempdir/${repo#*/}/$key" "$target"
+            git add "$target"
+        fi
     done
 
     # check if there are any changes
-    if [ ! -z "$(git diff)" ]
+    if ! git status | grep 'nothing to commit'
     then
         # commit files to repo
         msg=$(date +"Update from $repo at %H:%M on %Y-%m-%d")
 
         git config --global user.name 'Github aggregate action'
         git config --global user.email 'aggregate@users.noreply.github.com'
-        git commit -am "$msg"
+        git commit -m "$msg"
         git push
     else
         echo "No changes to commit"
